@@ -1,49 +1,195 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
+#include <stdlib.h>
 #include <ctype.h>
 
-void lowerCase(char * line) {
-    for (int i = 0; line[i]; i++) {
-        line[i] = tolower(line[i]);
+#define MAX_INPUT 1024
+
+// Function declarations
+void toLower(char* buf);
+int guess(const char* buf, const int* filebuf, int row, int col);
+int load(const char* buf, int** filebuf, int* row, int* col);
+int processCommands(const char* input);
+
+int main() {
+    char input[MAX_INPUT];
+    printf("Enter commands (e.g., --load text.txt --guess --exit):\n");
+    if (!fgets(input, MAX_INPUT, stdin)) {
+        printf("Error: Failed to read input.\n");
+        return 1;
+    }
+    while (true) {
+        if (processCommands(input) == 1);
+        break;
+    }
+    return 0;
+}
+
+// Convert string to lowercase
+void toLower(char* buf) {
+    if (!buf) return; // Null check
+    for (int i = 0; buf[i]; i++) {
+        buf[i] = tolower((unsigned char)buf[i]);
     }
 }
 
-int guess(char * command){
-	scanf("%s", command);
-	lowerCase(command)
-	if (findCommands(command) != 0){
-		return 0;
-	}
-	// Find a way to create cords
+// Safely handle guess commands
+// Safely handle guess commands
+int guess(const char* buf, const int* filebuf, int row, int col) {
+    if (!filebuf) {
+        printf("Error: No data loaded. Please load a file first.\n");
+        return 0;
+    }
+    if (!buf || strlen(buf) < 2) {
+        printf("Error: Invalid guess format.\n");
+        return 0;
+    }
+
+    // Parse the column (single or double letter)
+    int colIndex = 0;
+    int offset = 0;
+
+    if (isalpha(buf[0]) && isdigit(buf[1])) { // Single-letter column
+        colIndex = buf[0] - 'a';
+        offset = 1;
+    }
+    else if (isalpha(buf[0]) && isalpha(buf[1]) && isdigit(buf[2])) { // Double-letter column
+        colIndex = (buf[0] - 'a' + 1) * 26 + (buf[1] - 'a');
+        offset = 2;
+    }
+    else {
+        printf("Error: Invalid guess format (%s).\n", buf);
+        return 0;
+    }
+
+    // Parse the row
+    int number = atoi(&buf[offset]) - 1; // Adjust for zero-based index
+
+    if (colIndex < 0 || colIndex >= col || number < 0 || number >= row) {
+        printf("Error: Invalid guess position (%s).\n", buf);
+        return 0;
+    }
+
+    int index = number * col + colIndex;
+    printf("Value at %s is: %d\n", buf, filebuf[index]);
+    return 1;
 }
 
-int load(char * command){
-	FILE *fptr
-	fptr = fopen(command);
-	if (fptr == NULL){
-		printf("That shit didn't work try a differnt file");
-		return -1;
-	}
-	scanf("%s", command);
-	
+
+// Safely load data from a file
+int load(const char* buf, int** filebuf, int* row, int* col) {
+    if (!buf || !filebuf || !row || !col) {
+        printf("Error: Invalid arguments to load function.\n");
+        return 0;
+    }
+
+    FILE* fptr = NULL;
+    if (fopen_s(&fptr, buf, "r") != 0 || fptr == NULL) {
+        printf("Error: Failed to open file '%s'.\n", buf);
+        return 0;
+    }
+
+    if (fscanf_s(fptr, "%d %d", row, col) != 2) {
+        printf("Error: Invalid file format.\n");
+        fclose(fptr);
+        return 0;
+    }
+
+    int len = (*row) * (*col);
+    *filebuf = (int*)malloc(len * sizeof(int));
+    if (!*filebuf) {
+        printf("Error: Memory allocation failed.\n");
+        fclose(fptr);
+        return 0;
+    }
+
+    for (int i = 0; i < len; i++) {
+        if (fscanf_s(fptr, "%d,", &(*filebuf)[i]) != 1) {
+            printf("Error: Failed to read data at index %d.\n", i);
+            free(*filebuf);
+            *filebuf = NULL;
+            fclose(fptr);
+            return 0;
+        }
+    }
+
+    fclose(fptr);
+    printf("File '%s' loaded successfully with %d rows and %d columns.\n", buf, *row, *col);
+    return 1;
 }
 
-int findCommands(char * command){
-	scanf("%s", command);
-	lowerCase(command);
-	if (strncmp(command, '--g') == 1){
-		guess(command);
-		return 1;
-	} else if (strncmp(command, '--i') == 1){
-		if (load(command) == -1){
-			return -1;
-		}
-	}
-}
+// Safely process user commands
+// Safely process user commands with better parsing
+int processCommands(const char* input) {
+    if (!input) {
+        printf("Error: Invalid input.\n");
+        return 0;
+    }
 
-int main() {
-	char command[256];
-	findCommands(command)
-    return 0;
+    char buf[MAX_INPUT];
+    if (strcpy_s(buf, MAX_INPUT, input) != 0) {
+        printf("Error: String copy failed.\n");
+        return 0;
+    }
+    buf[strcspn(buf, "\n")] = '\0'; // Remove trailing newline
+
+    char* context = NULL;
+    char* token = strtok_s(buf, " ", &context);
+
+    int* filebuf = NULL;
+    int row = 0, col = 0;
+
+    while (token) {
+        // Trim leading/trailing spaces from token
+        while (*token == ' ') token++;
+        if (*token == '\0') {
+            token = strtok_s(NULL, " ", &context);
+            continue;
+        }
+
+        if (strcmp(token, "--load") == 0) {
+            token = strtok_s(NULL, " ", &context);
+            if (token) {
+                if (!load(token, &filebuf, &row, &col)) {
+                    printf("Error: Failed to load file.\n");
+                    break;
+                }
+            }
+            else {
+                printf("Error: Missing filename after --load.\n");
+                break;
+            }
+        }
+        else if (strcmp(token, "--guess") == 0) {
+            token = strtok_s(NULL, " ", &context);
+            if (token) {
+                char* guessContext = NULL;
+                char* singleGuess = strtok_s(token, ",", &guessContext);
+
+                while (singleGuess) {
+                    if (!guess(singleGuess, filebuf, row, col)) {
+                        printf("Error: Invalid guess '%s'.\n", singleGuess);
+                        break;
+                    }
+                    singleGuess = strtok_s(NULL, ",", &guessContext);
+                }
+            }
+            else {
+                printf("Error: Missing argument after --guess.\n");
+                break;
+            }
+        }
+        else if (strcmp(token, "--exit") == 0) {
+            printf("Exiting the program.\n");
+            return 1;
+            break;
+        }
+        else {
+            printf("Error: Unknown command '%s'.\n", token);
+        }
+
+        token = strtok_s(NULL, " ", &context);
+    }
+
+    free(filebuf); // Safely free memory
 }
